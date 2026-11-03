@@ -1,8 +1,43 @@
-# Running and understanding shared-green RL
+# AntifragiCity T4.5 — Practical Tutorial
 
-This guide starts with an unpacked folder and ends with a completed training run.
-It describes the code included here, rather than earlier experimental versions.
-You do not need the original repository or `direct_rl` package.
+## Funding and disclaimer
+
+AntifragiCity has received funding from the European Union's Horizon Europe
+research and innovation programme under grant agreement **No. 101203052**.
+
+The following disclaimer is adapted from Deliverable D4.5 for this documentation:
+
+> The information, documentation and figures available in this documentation
+> are provided by the AntifragiCity project's consortium under EC grant
+> agreement 101203052 and do not necessarily reflect the views of the European
+> Commission. The European Commission is not liable for any use that may be
+> made of the information contained herein.
+
+**Project copyright notice:** © ANTIFRAGICITY 2025-2030.
+
+## How to use this tutorial
+
+This guide explains how to install, run and interpret the standalone training
+core associated with D4.5, *Operational Scenarios and Policies*. Within WP4,
+T4.5 translates the perimeter-control work of T4.4 into microscopic SUMO traffic
+signal operations, building on the simulation work of T4.3. For a concise
+project overview and repository map, see the [README](README.md).
+
+The instructions below describe the current code. The report's fixed-time
+comparisons and performance analyses require tools and results outside this
+package. In particular, the current seven-input state includes elapsed time;
+historical six-input experiments and checkpoints are not interchangeable with
+this version. Demand-file provenance is documented in the
+[scenario guide](scenario/README.md).
+
+| Goal | Read |
+|---|---|
+| Install and verify a first run | [§2 Setup](#2-install-and-check-the-environment), [§3 Small first run](#3-make-a-small-first-run) |
+| Configure an experiment | [§4 Training](#4-run-the-usual-one-hour-experiment), [§5 Demand and inputs](#5-choose-demand-and-simulation-inputs) |
+| Understand the controller | [§6 State](#6-what-the-agent-sees), [§7 Actions](#7-what-the-agent-outputs-and-how-lights-use-it), [§8 Reward and learning](#8-reward-tts-and-learning) |
+| Inspect results and continue a run | [§9 Outputs](#9-find-and-interpret-outputs), [§10 Resume](#10-resume-training) |
+| Change parameters or inspect code | [§11 Parameters](#11-command-line-parameter-reference), [§12 File guide](#12-file-by-file-reading-guide) |
+| Resolve a problem | [§13 Troubleshooting](#13-common-problems) |
 
 ## 1. What this program does
 
@@ -107,7 +142,7 @@ Do not resume this short check as a one-hour experiment.
 ## 4. Run the usual one-hour experiment
 
 This command explicitly selects the reference training procedure, 50 rounds,
-eight generators, and the settings used in our recent experiments. It is one
+eight generators, and the reference settings documented for this package. It is one
 line so it works in both PowerShell and Bash.
 
 ```sh

@@ -1,38 +1,53 @@
-# Shared-green RL core
+# AntifragiCity T4.5 — Operational Scenarios and Policies
 
-New to the codebase? Start with [the practical tutorial](TUTORIAL.md) for setup,
-first-run commands, module explanations, output interpretation and all tunable
-parameters.
+## Funding and disclaimer
 
-Minimal standalone package for parallel DDPG training with elapsed time in the
-state. Run commands from this directory. Python 3.12 and SUMO 1.24.0 were used
-for the existing experiments.
+AntifragiCity has received funding from the European Union's Horizon Europe
+research and innovation programme under grant agreement **No. 101203052**.
 
-## Contents
+The following disclaimer is adapted from Deliverable D4.5 for this documentation:
 
-- `ddpg_agent.py`: actor, critic, replay, training updates and checkpoints.
-- `shared_green_rl/train_parallel.py`: parallel collection and central training.
-- `shared_green_rl/generating.py`: one frozen-policy SUMO rollout per generator.
-- `shared_green_rl/environment.py`: states, completion reward and cycle stepping.
-- `shared_green_rl/signals.py`: shared green allocation across the 17 lights.
-- `shared_green_rl/sumo_runtime.py`: configuration copies and accumulation counts.
-- `LuSTScenario-master/`: only the default configuration's required inputs,
-  region definitions, boundary-light IDs and upstream license.
-- `scenario/`: the three experimental demand profiles used in training;
-  see [profile selection and commands](scenario/README.md).
+> The information, documentation and figures available in this documentation
+> are provided by the AntifragiCity project's consortium under EC grant
+> agreement 101203052 and do not necessarily reflect the views of the European
+> Commission. The European Commission is not liable for any use that may be
+> made of the information contained herein.
 
-There are no plotting, testing, summarizing, evaluation or demand-generation
-scripts, saved outputs or checkpoints in this package.
-Training still writes its normal metrics and checkpoints when run.
+**Project copyright notice:** © ANTIFRAGICITY 2025-2030.
 
-The training loop, rollout worker, signal allocation and agent learning methods
-are preserved from `shared_green_rl_server`. Packaging removes the agent's
-self-test and replaces the baseline/audit dependency with runtime-only helpers.
-Accumulation keeps the original rule: vehicles on internal junction lanes are
-assigned using the incoming route edge; vehicles with no road are excluded.
-No boundary audit reports are generated.
+## Overview
 
-## Setup
+This repository contains the standalone training core for the AntifragiCity
+T4.5 microscopic perimeter-control study. A Deep Deterministic Policy Gradient
+(DDPG) controller interacts with Simulation of Urban MObility (SUMO) through
+TraCI in the Luxembourg SUMO Traffic (LuST) scenario. Every 90 simulated
+seconds, it selects one shared inward (B-to-A) green-time budget for 17 boundary
+traffic lights between a protected Region A and the surrounding Region B.
+
+D4.5 builds on the microscopic simulation work of T4.3 and the macroscopic
+perimeter-control methodology of T4.4. This implementation learns from regional
+vehicle counts, their first and second differences, and elapsed time. Its reward
+is completed trips per control interval; total time spent (TTS) is recorded
+separately. The reward has no additional antifragility or redundancy term.
+
+The package includes the learner, parallel SUMO rollout workers, required
+scenario inputs and three experimental demand profiles. The report also covers
+fixed-time comparisons and performance analysis; this package does not include
+those evaluation tools, plotting scripts, demand-generation scripts, saved
+results or trained checkpoints. Training creates new metrics and checkpoints.
+The current seven-input state also differs from historical six-input runs, so
+using their demand files does not by itself reproduce their reported results.
+
+Start with the [practical tutorial](TUTORIAL.md) for a small installation check,
+the control and learning workflow, output interpretation and all parameters.
+Use the [demand-profile guide](scenario/README.md) for profile provenance and
+complete experiment commands.
+
+## Installation
+
+Run commands from this repository's root directory. Python **3.12** and SUMO
+**1.24.0** were used for the existing experiments. The Python requirements pin
+NumPy and PyTorch; the learner runs on CPU.
 
 Install SUMO separately and ensure `sumo` is on PATH. Set `SUMO_HOME` to the SUMO
 installation directory so `$SUMO_HOME/tools/traci` is available.
@@ -45,7 +60,7 @@ python -m pip install -r requirements.txt
 sumo --version
 ```
 
-## Train
+## Train and resume
 
 The command below uses the original baseline demand, eight generators and the
 reference training procedure. Keep `--training-mode reference` explicit: the
@@ -54,6 +69,12 @@ preserved CLI also supports legacy training and defaults to that mode.
 ```sh
 python -B -m shared_green_rl.train_parallel --training-mode reference --episodes 50 --generators 8 --train-sample-size 1000 --critic-epochs 128 --critic-batch-size 256 --critic-validation-fraction 0.2 --critic-patience 20 --actor-steps 2 --target-update-period 5 --noise 2 --seed 42 --sumo-seed 42 --exploration-seed 10000 --begin 28800 --duration 3600 --min-green 5 --state-scale 1000 --derivative-scale 100 --output outputs/reference_training
 ```
+
+Each round collects eight independent one-hour SUMO rollouts using one frozen
+policy, then updates the shared learner. Fifty rounds therefore run 400
+simulations. Choose a **new output directory** for every command; existing
+directories are rejected. For a shorter first run, follow
+[Tutorial §3](TUTORIAL.md#3-make-a-small-first-run).
 
 To use a bundled demand profile, add one of these options to the training
 command and choose a distinct output directory:
@@ -69,13 +90,14 @@ other two append 3,000 trips to it. Relative paths are resolved from your workin
 directory. See [scenario/README.md](scenario/README.md) for complete commands.
 
 Resume a completed run into a new output directory; `--episodes` is the number
-of additional rounds. Other experiment settings are inherited.
+of additional rounds. Other experiment settings are inherited and must remain
+unchanged.
 
 ```sh
 python -B -m shared_green_rl.train_parallel --resume outputs/reference_training --episodes 50 --output outputs/reference_training_continued
 ```
 
-## State, action and training
+## Control and learning at a glance
 
 The seven inputs, in order, are:
 
@@ -102,7 +124,38 @@ Reference training samples up to 1,000 replay transitions, freezes their target
 values, fits the critic with an 80/20 train/validation split and patience-based
 stopping, takes two actor steps, and updates target networks every five rounds.
 
-`episodes.csv` contains generator-averaged metrics. Each episode's
+## Outputs and interpretation
+
+`episodes.csv` contains generator-averaged metrics; `generators.csv` records
+each individual rollout. Each episode's
 `rollout_agent.pt` is the frozen policy that produced those rollouts; the root
 `agent.pt` is saved after learning. Resume also requires `replay_buffer.json`
-and `settings.json`. Outputs should remain outside the scenario directory.
+and `settings.json`, together with the completed run's `episodes.csv`.
+Outputs should remain outside the scenario directory.
+
+Training metrics include exploration noise. Critic validation uses replay
+transitions and is not a separate traffic-policy evaluation. Setting
+`--noise 0` still trains the learner. See
+[Tutorial §9](TUTORIAL.md#9-find-and-interpret-outputs) for the output layout
+and metric definitions.
+
+## Repository guide
+
+| Path | Purpose |
+|---|---|
+| [TUTORIAL.md](TUTORIAL.md) | Setup, first run, methodology, parameters and troubleshooting |
+| [ddpg_agent.py](ddpg_agent.py) | Actor, critic, replay, learning updates and checkpoints |
+| [shared_green_rl/train_parallel.py](shared_green_rl/train_parallel.py) | Training entry point: parallel collection and central learning |
+| [shared_green_rl/generating.py](shared_green_rl/generating.py) | One frozen-policy SUMO rollout per generator |
+| [shared_green_rl/environment.py](shared_green_rl/environment.py) | Observations, completion reward and control-cycle stepping |
+| [shared_green_rl/signals.py](shared_green_rl/signals.py) | Shared green-time allocation across the 17 lights |
+| [shared_green_rl/sumo_runtime.py](shared_green_rl/sumo_runtime.py) | Configuration copies, SUMO access and regional accumulation |
+| [LuSTScenario-master/](LuSTScenario-master/) | Required network, original demand, region definitions and upstream licence |
+| [scenario/](scenario/README.md) | Three experimental demand profiles and selection commands |
+
+The training loop, rollout worker, signal allocation and agent learning methods
+are preserved from `shared_green_rl_server`. Packaging removes the agent's
+self-test and replaces the baseline/audit dependency with runtime-only helpers.
+Vehicles on internal junction lanes are assigned to regions using the incoming
+route edge; vehicles with no road are excluded. No boundary audit reports are
+generated.
